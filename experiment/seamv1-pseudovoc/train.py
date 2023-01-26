@@ -33,6 +33,18 @@ from net.sync_batchnorm import SynchronizedBatchNorm2d
 from utils.visualization import generate_vis, max_norm
 from tqdm import tqdm
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("--lr", default=None, type=float)
+parser.add_argument("--eval", action="store_true")
+
+args = parser.parse_args()
+if args.lr is not None:
+    config_dict["TRAIN_LR"] = args.lr
+    config_dict["EXP_NAME"] += f"_lr{args.lr}"
+    config_dict["MODEL_SAVE_DIR"] = os.path.join(config_dict["ROOT_DIR"], 'model', config_dict["EXP_NAME"])
+    config_dict["LOG_DIR"] = os.path.join(config_dict["ROOT_DIR"], 'log', config_dict["EXP_NAME"])
+
 cfg = Configuration(config_dict)
 
 def train_net():

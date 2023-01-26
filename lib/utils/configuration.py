@@ -15,6 +15,7 @@ class Configuration():
 	def __check(self):
 		if not torch.cuda.is_available():
 			raise ValueError('config.py: cuda is not avalable')
+		self.GPUS = torch.cuda.device_count()
 		if self.GPUS == 0:
 			raise ValueError('config.py: the number of GPU is 0')
 		if self.GPUS != torch.cuda.device_count():
