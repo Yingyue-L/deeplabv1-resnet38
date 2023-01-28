@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="d9bc3cb1-207e-4ff9-ba6a-de7ef6d17078" name="local 2001">
+        <fileTransfer accessType="SFTP" host="localhost" port="2001" sshConfigId="efe2e571-ca6b-46c8-ae57-9a4847fa4d85" sshConfig="yingyueli@localhost:2001 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="239dd309-5161-4463-a8de-d013b5d12631" name="local 2022">
+        <fileTransfer accessType="SFTP" host="localhost" port="2022" sshConfigId="d648f17c-ffb7-4049-8a5f-2b5d5c309896" sshConfig="yingyueli@localhost:2022 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="c84e3cbd-7e97-4a42-a9dc-98ec5506d439" name="local 2000">
+        <fileTransfer accessType="SFTP" host="localhost" port="2000" sshConfigId="ef0bb894-f691-4f0b-815a-b95a757ba658" sshConfig="lyy@localhost:2000 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="cf31d8d9-981c-4b78-abce-77316ef9a9b5" name="local 2023">
+        <fileTransfer accessType="SFTP" host="localhost" port="2023" sshConfigId="f3c41d41-85fd-4855-940b-d27b93b0068b" sshConfig="yingyueli@localhost:2023 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+    <groups>
+      <group>
+        <name>local</name>
+        <servers>
+          <name value="local 2001" />
+          <name value="local 2022" />
+          <name value="local 2000" />
+          <name value="local 2023" />
+        </servers>
+      </group>
+    </groups>
+  </component>
+</project>

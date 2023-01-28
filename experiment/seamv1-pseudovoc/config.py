@@ -13,7 +13,10 @@ config_dict = {
     # 'DATA_NAME': 'VOCDataset',
     # 'DATA_PSEUDO_GT': 'WeakTrMask',
     # 'MODEL_NUM_CLASSES': 21,
-    'EXP_NAME': 'WeakTrCOCOMask',
+    # 'TRAIN_ITERATION': 20000,
+    'TRAIN_LR': 0.0015,
+    'TRAIN_ITERATION': 40000,
+    'EXP_NAME': 'WeakTrCOCOMask_lr0.0015_itr40000',
     'DATA_NAME': 'COCODataset',
     'DATA_PSEUDO_GT': 'WeakTrCOCOMask',
     'MODEL_NUM_CLASSES': 91,
@@ -42,7 +45,7 @@ config_dict = {
 
     'MODEL_FREEZEBN': False,
 
-    'TRAIN_LR': 0.001,
+
     'TRAIN_MOMENTUM': 0.9,
     'TRAIN_WEIGHT_DECAY': 0.0005,
     'TRAIN_BN_MOM': 0.0003,
@@ -50,7 +53,7 @@ config_dict = {
     'TRAIN_BATCHES': 10,
     'TRAIN_SHUFFLE': True,
     'TRAIN_MINEPOCH': 0,
-    'TRAIN_ITERATION': 20000,
+    'TRAIN_MINBATCHES':10,
     'TRAIN_TBLOG': True,
 
     # "TEST_MULTISCALE": [1.0],
@@ -64,8 +67,8 @@ config_dict = {
 config_dict['ROOT_DIR'] = os.path.abspath(os.path.join(os.path.dirname("__file__"), '..', '..'))
 config_dict['MODEL_SAVE_DIR'] = os.path.join(config_dict['ROOT_DIR'], 'model', config_dict['EXP_NAME'])
 config_dict['TRAIN_CKPT'] = None
-# config_dict['TRAIN_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/WeakTrRW'
-#                                                                  '/deeplabv1_resnet38_VOCDataset_itr20000_all.pth')
+# config_dict['TRAIN_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}'
+#                                                                  '/deeplabv1_resnet38_COCODataset_epoch1.pth')
 config_dict['LOG_DIR'] = os.path.join(config_dict['ROOT_DIR'], 'log', config_dict['EXP_NAME'])
 config_dict['TEST_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}'
                                                                  '/deeplabv1_resnet38_COCODataset_epoch0.pth')

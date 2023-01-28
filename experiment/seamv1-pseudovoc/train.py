@@ -33,10 +33,16 @@ from net.sync_batchnorm import SynchronizedBatchNorm2d
 from utils.visualization import generate_vis, max_norm
 from tqdm import tqdm
 
+import utils.dist as ptu
+from torch.nn.parallel import DistributedDataParallel as DDP
+from dataloaler import Loader
+from torch import distributed
+
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--lr", default=None, type=float)
 parser.add_argument("--eval", action="store_true")
+parser.add_argument("--local_rank", default=None, type=int)
 
 args = parser.parse_args()
 if args.lr is not None:
@@ -44,6 +50,10 @@ if args.lr is not None:
     config_dict["EXP_NAME"] += f"_lr{args.lr}"
     config_dict["MODEL_SAVE_DIR"] = os.path.join(config_dict["ROOT_DIR"], 'model', config_dict["EXP_NAME"])
     config_dict["LOG_DIR"] = os.path.join(config_dict["ROOT_DIR"], 'log', config_dict["EXP_NAME"])
+
+torch.cuda.set_device(args.local_rank)
+torch.distributed.init_process_group(backend="nccl", init_method="env://")
+ptu.set_gpu_dist_mode(True)
 
 cfg = Configuration(config_dict)
 
@@ -53,32 +63,36 @@ def train_net():
 	dataset = generate_dataset(cfg, period=period, transform=transform)
 	def worker_init_fn(worker_id):
 		np.random.seed(1 + worker_id)
-	dataloader = DataLoader(dataset, 
-				batch_size=cfg.TRAIN_BATCHES, 
-				shuffle=cfg.TRAIN_SHUFFLE, 
+	dataloader = Loader(dataset,
+				batch_size=cfg.TRAIN_BATCHES // ptu.world_size,
 				num_workers=cfg.DATA_WORKERS,
-				pin_memory=True,
-				drop_last=True,
-				worker_init_fn=worker_init_fn)
+				worker_init_fn=worker_init_fn,
+				distributed=ptu.distributed,)
 	
 	net = generate_net(cfg, batchnorm=nn.BatchNorm2d)
 	if cfg.TRAIN_CKPT:
-		net.load_state_dict(torch.load(cfg.TRAIN_CKPT),strict=True)
+		net.load_state_dict(torch.load(cfg.TRAIN_CKPT, map_location=ptu.device),strict=True)
 		print('load pretrained model')
 	if cfg.TRAIN_TBLOG:
 		from tensorboardX import SummaryWriter
 		# Set the Tensorboard logger
 		tblogger = SummaryWriter(cfg.LOG_DIR)	
 
-	print('Use %d GPU'%cfg.GPUS)
-	device = torch.device(0)
-	if cfg.GPUS > 1:
-		net = nn.DataParallel(net)
-		patch_replication_callback(net)
+	# print('Use %d GPU'%cfg.GPUS)
+	# device = torch.device(0)
+	# if cfg.GPUS > 1:
+	# 	net = nn.DataParallel(net)
+	# 	patch_replication_callback(net)
+
+	net.to(ptu.device)
+
+	if ptu.distributed:
+		# model = DDP(model, device_ids=[ptu.device], find_unused_parameters=True)
+		net = DDP(net, device_ids=[args.local_rank], output_device=args.local_rank)
 		parameter_source = net.module
 	else:
 		parameter_source = net
-	net.to(device)		
+
 	parameter_groups = parameter_source.get_parameter_groups()
 	optimizer = optim.SGD(
 		params = [
@@ -90,12 +104,12 @@ def train_net():
 		momentum=cfg.TRAIN_MOMENTUM,
 		weight_decay=cfg.TRAIN_WEIGHT_DECAY
 	)
-	itr = cfg.TRAIN_MINEPOCH * len(dataset)//(cfg.TRAIN_BATCHES)
+	itr = cfg.TRAIN_MINEPOCH * len(dataset)//(cfg.TRAIN_MINBATCHES)
 	max_itr = cfg.TRAIN_ITERATION
 	max_epoch = max_itr*(cfg.TRAIN_BATCHES)//len(dataset)+1
 	tblogger = SummaryWriter(cfg.LOG_DIR)
 	criterion = nn.CrossEntropyLoss(ignore_index=255)
-	with tqdm(total=max_itr) as pbar:
+	with tqdm(initial=itr, total=max_itr, position=ptu.dist_rank) as pbar:
 		for epoch in range(cfg.TRAIN_MINEPOCH, max_epoch):
 			for i_batch, sample in enumerate(dataloader):
 
@@ -105,8 +119,8 @@ def train_net():
 				inputs, seg_label = sample['image'], sample['segmentation']
 				n,c,h,w = inputs.size()
 
-				pred1 = net(inputs.to(0))
-				loss = criterion(pred1, seg_label.to(0))
+				pred1 = net(inputs.to(ptu.device))
+				loss = criterion(pred1, seg_label.to(ptu.device))
 				loss.backward()
 				optimizer.step()
 
@@ -133,15 +147,16 @@ def train_net():
 				itr += 1
 				if itr>=max_itr:
 					break
-			save_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_epoch%d.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,epoch))
-			torch.save(parameter_source.state_dict(), save_path)
-			print('%s has been saved'%save_path)
-			remove_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_epoch%d.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,epoch-1))
-			if os.path.exists(remove_path):
-				os.remove(remove_path)
-			
-	save_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_itr%d_all.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,cfg.TRAIN_ITERATION))
-	torch.save(parameter_source.state_dict(),save_path)
+			if ptu.dist_rank == 0:
+				save_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_epoch%d.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,epoch))
+				torch.save(parameter_source.state_dict(), save_path)
+				print('%s has been saved'%save_path)
+				remove_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_epoch%d.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,epoch-1))
+				if os.path.exists(remove_path):
+					os.remove(remove_path)
+	if ptu.dist_rank == 0:
+		save_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_itr%d_all.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,cfg.TRAIN_ITERATION))
+		torch.save(parameter_source.state_dict(),save_path)
 	if cfg.TRAIN_TBLOG:
 		tblogger.close()
 	print('%s has been saved'%save_path)

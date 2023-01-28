@@ -71,6 +71,7 @@ def test_net():
                         batch_size=1,
                         num_workers=cfg.DATA_WORKERS,
                         distributed=ptu.distributed,
+                        worker_init_fn=worker_init_fn,
                         )
 
     net = generate_net(cfg, batchnorm=nn.BatchNorm2d,
