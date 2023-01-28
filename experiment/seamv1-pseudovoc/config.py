@@ -9,10 +9,19 @@ import cv2
 import time
 
 config_dict = {
-    'EXP_NAME': 'WeakTrRW_continue',
+    # 'EXP_NAME': 'WeakTrMask_lr0.0008',
+    # 'DATA_NAME': 'VOCDataset',
+    # 'DATA_PSEUDO_GT': 'WeakTrMask',
+    # 'MODEL_NUM_CLASSES': 21,
+    'EXP_NAME': 'WeakTrCOCOMask',
+    'DATA_NAME': 'COCODataset',
+    'DATA_PSEUDO_GT': 'WeakTrCOCOMask',
+    'MODEL_NUM_CLASSES': 91,
+
     'GPUS': 2,
 
-    'DATA_NAME': 'VOCDataset',
+
+
     'DATA_YEAR': 2012,
     'DATA_AUG': True,
     'DATA_WORKERS': 4,
@@ -24,12 +33,13 @@ config_dict = {
     'DATA_RANDOM_S': 10,
     'DATA_RANDOM_V': 10,
     'DATA_RANDOMFLIP': 0.5,
-    'DATA_PSEUDO_GT': 'AffinityNet@resnet38@WeakTr@trainaug@beta=10@exp_times=8@rw@power2.5@crf',
+    # 'DATA_PSEUDO_GT': 'AffinityNet@resnet38@WeakTr@trainaug@beta=10@exp_times=8@rw@power2.5@crf',
 
+    
     'MODEL_NAME': 'deeplabv1',
     'MODEL_BACKBONE': 'resnet38',
     'MODEL_BACKBONE_PRETRAIN': True,
-    'MODEL_NUM_CLASSES': 21,
+
     'MODEL_FREEZEBN': False,
 
     'TRAIN_LR': 0.001,
@@ -43,21 +53,22 @@ config_dict = {
     'TRAIN_ITERATION': 20000,
     'TRAIN_TBLOG': True,
 
-    "TEST_MULTISCALE": [1.0],
-    'TEST_FLIP': False,
-    # 'TEST_MULTISCALE': [0.5, 0.75, 1.0, 1.25, 1.5],
-    # 'TEST_FLIP': True,
+    # "TEST_MULTISCALE": [1.0],
+    # 'TEST_FLIP': False,
+    'TEST_MULTISCALE': [0.5, 0.75, 1.0, 1.25, 1.5],
+    'TEST_FLIP': True,
     'TEST_CRF': False,
     'TEST_BATCHES': 1,
 }
 
 config_dict['ROOT_DIR'] = os.path.abspath(os.path.join(os.path.dirname("__file__"), '..', '..'))
 config_dict['MODEL_SAVE_DIR'] = os.path.join(config_dict['ROOT_DIR'], 'model', config_dict['EXP_NAME'])
-config_dict['TRAIN_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/WeakTrRW'
-                                                                 '/deeplabv1_resnet38_VOCDataset_itr20000_all.pth')
+config_dict['TRAIN_CKPT'] = None
+# config_dict['TRAIN_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/WeakTrRW'
+#                                                                  '/deeplabv1_resnet38_VOCDataset_itr20000_all.pth')
 config_dict['LOG_DIR'] = os.path.join(config_dict['ROOT_DIR'], 'log', config_dict['EXP_NAME'])
 config_dict['TEST_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}'
-                                                                 '/deeplabv1_resnet38_VOCDataset_itr20000_all.pth')
-config_dict['TEST_SAVE'] = None
-# config_dict['TEST_SAVE'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}/val')
+                                                                 '/deeplabv1_resnet38_COCODataset_epoch0.pth')
+# config_dict['TEST_SAVE'] = None
+config_dict['TEST_SAVE'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}/val')
 sys.path.insert(0, os.path.join(config_dict['ROOT_DIR'], 'lib'))

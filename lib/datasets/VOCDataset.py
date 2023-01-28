@@ -24,7 +24,7 @@ class VOCDataset(BaseDataset):
 		self.dataset_name = 'VOC%d'%cfg.DATA_YEAR
 		self.root_dir = os.path.join(cfg.ROOT_DIR,'data','VOCdevkit')
 		self.dataset_dir = os.path.join(self.root_dir,self.dataset_name)
-		self.rst_dir = os.path.join(self.root_dir,'results',self.dataset_name,'Segmentation')
+		self.rst_dir = os.path.join(cfg.ROOT_DIR,'data','results',self.dataset_name,'Segmentation')
 		self.eval_dir = os.path.join(self.root_dir,'eval_result',self.dataset_name,'Segmentation')
 		self.img_dir = os.path.join(self.dataset_dir, 'JPEGImages')
 		self.ann_dir = os.path.join(self.dataset_dir, 'Annotations')
