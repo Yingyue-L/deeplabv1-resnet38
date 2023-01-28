@@ -1,0 +1,240 @@
+import joblib
+import os
+import numpy as np
+import argparse
+import torch
+from PIL import Image
+import pandas as pd
+from densecrf import crf_inference
+from pathlib import Path
+
+import torch.nn.functional as F
+
+categories = ['background', 'aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow',
+              'diningtable', 'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
+              'tvmonitor']
+categories_coco = ['background',
+                   'person',
+                   'bicycle',
+                   'car',
+                   'motorcycle',
+                   'airplane',
+                   'bus',
+                   'train',
+                   'truck',
+                   'boat',
+                   'traffic light',
+                   'fire hydrant',
+                   'street sign',
+                   'stop sign',
+                   'parking meter',
+                   'bench',
+                   'bird',
+                   'cat',
+                   'dog',
+                   'horse',
+                   'sheep',
+                   'cow',
+                   'elephant',
+                   'bear',
+                   'zebra',
+                   'giraffe',
+                   'hat',
+                   'backpack',
+                   'umbrella',
+                   'shoe',
+                   'eye glasses',
+                   'handbag',
+                   'tie',
+                   'suitcase',
+                   'frisbee',
+                   'skis',
+                   'snowboard',
+                   'sports ball',
+                   'kite',
+                   'baseball bat',
+                   'baseball glove',
+                   'skateboard',
+                   'surfboard',
+                   'tennis racket',
+                   'bottle',
+                   'plate',
+                   'wine glass',
+                   'cup',
+                   'fork',
+                   'knife',
+                   'spoon',
+                   'bowl',
+                   'banana',
+                   'apple',
+                   'sandwich',
+                   'orange',
+                   'broccoli',
+                   'carrot',
+                   'hot dog',
+                   'pizza',
+                   'donut',
+                   'cake',
+                   'chair',
+                   'couch',
+                   'potted plant',
+                   'bed',
+                   'mirror',
+                   'dining table',
+                   'window',
+                   'desk',
+                   'toilet',
+                   'door',
+                   'tv',
+                   'laptop',
+                   'mouse',
+                   'remote',
+                   'keyboard',
+                   'cell phone',
+                   'microwave',
+                   'oven',
+                   'toaster',
+                   'sink',
+                   'refrigerator',
+                   'blender',
+                   'book',
+                   'clock',
+                   'vase',
+                   'scissors',
+                   'teddy bear',
+                   'hair drier',
+                   'toothbrush']
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--list",
+                        default='../../data/VOCdevkit/VOC2012/ImageSets/Segmentation/val.txt',
+                        type=str)
+    parser.add_argument("--predict-dir", default="../../model/WeakTrRW_3090/val", type=str)
+    parser.add_argument("--predict-png-dir", default="../../model/WeakTrRW_3090/val_png", type=str)
+    parser.add_argument("--img-path", default='../../data/VOCdevkit/VOC2012/JPEGImages', type=str)
+    parser.add_argument("--n-jobs", default=10, type=int)
+    parser.add_argument("--gt-folder", default="../../data/VOCdevkit/VOC2012/SegmentationClassAug")
+    parser.add_argument("--num-cls", default=21, type=int)
+
+    args = parser.parse_args()
+
+    df = pd.read_csv(args.list, names=['filename'], converters={"filename": str})
+    name_list = df['filename'].values
+    if args.predict_png_dir is not None:
+        Path(args.predict_png_dir).mkdir(parents=True, exist_ok=True)
+    num_cls = args.num_cls
+    best_miou = 0
+    best_pos_sxy = 0
+    best_rgb_sxy = 0
+    best_rgb = 0
+    best_rgb_com = 0
+    pos_sxy = 1
+    rgb_sxy = 112
+    rgb = 2
+    rgb_com = 3
+    # for rgb_sxy in range(99,120):
+    #     for rgb in range(1, 5):
+    #         for rgb_com in range(1, 5):
+    #             print(f"pos_sxy:{pos_sxy}\n"
+    #                   f"rgb_sxy:{rgb_sxy}\n"
+    #                   f"rgb:{rgb}\n"
+    #                   f"rgb_com:{rgb_com}\n"
+    #                   )
+    def compute(i):
+        path = os.path.join(args.predict_dir, name_list[i] + ".npy")
+        seg_prob = np.load(path, allow_pickle=True).item()
+        keys = seg_prob["keys"]
+        seg_prob = seg_prob["prob"]
+
+        orig_image = np.asarray(Image.open(os.path.join(args.img_path, name_list[i] + ".jpg")).convert("RGB"))
+        seg_prob = F.softmax(torch.tensor(seg_prob), dim=0).cpu().numpy()
+        seg_prob = crf_inference(orig_image, seg_prob, labels=seg_prob.shape[0],
+                                 pos_sxy=pos_sxy, rgb_sxy=rgb_sxy, rgb=rgb, rgb_com=rgb_com)
+
+        seg_pred = np.argmax(seg_prob, axis=0)
+        predict = keys[seg_pred].astype(np.uint8)
+
+        # predict_img = Image.fromarray(predict)
+        # predict_img.save(os.path.join(args.predict_png_dir, name_list[i] + ".png"))
+
+        gt_file = os.path.join(args.gt_folder, name_list[i] + ".png")
+        gt = np.array(Image.open(gt_file))
+        cal = gt < 255
+        mask = (predict == gt) * cal
+
+        p_list, t_list, tp_list = [0] * args.num_cls, [0] * args.num_cls, [0] * args.num_cls
+        for i in range(args.num_cls):
+            p_list[i] += np.sum((predict == i) * cal)
+            t_list[i] += np.sum((gt == i) * cal)
+            tp_list[i] += np.sum((gt == i) * mask)
+
+        return p_list, t_list, tp_list
+
+
+    results = joblib.Parallel(n_jobs=args.n_jobs, verbose=10, pre_dispatch="all")(
+        [joblib.delayed(compute)(i) for i in range(len(name_list))]
+    )
+    p_lists, t_lists, tp_lists = zip(*results)
+    TP = [0] * num_cls
+    P = [0] * num_cls
+    T = [0] * num_cls
+    for idx in range(len(name_list)):
+        p_list = p_lists[idx]
+        t_list = t_lists[idx]
+        tp_list = tp_lists[idx]
+        for i in range(num_cls):
+            TP[i] += tp_list[i]
+            P[i] += p_list[i]
+            T[i] += t_list[i]
+
+    IoU = []
+    T_TP = []
+    P_TP = []
+    FP_ALL = []
+    FN_ALL = []
+    for i in range(num_cls):
+        IoU.append(TP[i] / (T[i] + P[i] - TP[i] + 1e-10))
+        T_TP.append(T[i] / (TP[i] + 1e-10))
+        P_TP.append(P[i] / (TP[i] + 1e-10))
+        FP_ALL.append((P[i] - TP[i]) / (T[i] + P[i] - TP[i] + 1e-10))
+        FN_ALL.append((T[i] - TP[i]) / (T[i] + P[i] - TP[i] + 1e-10))
+    loglist = {}
+    for i in range(num_cls):
+        if num_cls == 21:
+            loglist[categories[i]] = IoU[i] * 100
+        else:
+            loglist[categories_coco[i]] = IoU[i] * 100
+    miou = np.mean(np.array(IoU))
+    if miou > best_miou:
+        best_miou = miou
+                #     best_rgb = rgb
+                #     best_pos_sxy = pos_sxy
+                #     best_rgb_com = rgb_com
+                #     best_rgb_sxy = rgb_sxy
+                # print(f"mIoU:{best_miou}\n"
+                #       f"pos_sxy:{best_pos_sxy}\n"
+                #       f"rgb_sxy:{best_rgb_sxy}\n"
+                #       f"rgb:{best_rgb}\n"
+                #       f"rgb_com:{best_rgb_com}\n"
+                #       )
+
+    loglist['mIoU'] = best_miou * 100
+    fp = np.mean(np.array(FP_ALL))
+    loglist['FP'] = fp * 100
+    fn = np.mean(np.array(FN_ALL))
+    loglist['FN'] = fn * 100
+    for i in range(num_cls):
+        if num_cls == 21:
+            if i % 2 != 1:
+                print('%11s:%7.3f%%' % (categories[i], IoU[i] * 100), end='\t')
+            else:
+                print('%11s:%7.3f%%' % (categories[i], IoU[i] * 100))
+        else:
+            if i % 2 != 1:
+                print('%11s:%7.3f%%' % (categories_coco[i], IoU[i] * 100), end='\t')
+            else:
+                print('%11s:%7.3f%%' % (categories_coco[i], IoU[i] * 100))
+    print('\n======================================================')
+    print('%11s:%7.3f%%' % ('mIoU', miou * 100))
+    print('\n')
+    print(f'FP = {fp * 100}, FN = {fn * 100}')
