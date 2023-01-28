@@ -8,6 +8,7 @@ import numpy as np
 import random
 
 from pathlib import Path
+
 torch.manual_seed(1)  # cpu
 torch.cuda.manual_seed(1)  # gpu
 np.random.seed(1)  # numpy
@@ -32,27 +33,45 @@ from utils.DenseCRF import dense_crf
 from utils.test_utils import single_gpu_test
 from utils.imutils import onehot
 
+import utils.dist as ptu
+from torch.nn.parallel import DistributedDataParallel as DDP
+from dataloaler import Loader
+from torch import distributed
+
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--local_rank", default=None, type=int)
+parser.add_argument("--period", default="val", type=str)
+
+args = parser.parse_args()
+torch.cuda.set_device(args.local_rank)
+torch.distributed.init_process_group(backend="nccl", init_method="env://")
+ptu.set_gpu_dist_mode(True)
+
 cfg = Configuration(config_dict, False)
 
+
 def ClassLogSoftMax(f, category):
-	exp = torch.exp(f)
-	exp_norm = exp/torch.sum(exp*category, dim=1, keepdim=True)
-	softmax = exp_norm*category
-	logsoftmax = torch.log(exp_norm)*category
-	return softmax, logsoftmax
+    exp = torch.exp(f)
+    exp_norm = exp / torch.sum(exp * category, dim=1, keepdim=True)
+    softmax = exp_norm * category
+    logsoftmax = torch.log(exp_norm) * category
+    return softmax, logsoftmax
+
 
 def test_net():
-    period = 'val'
-    dataset = generate_dataset(cfg, period=period, transform='none')
+    # period = 'val'
+    dataset = generate_dataset(cfg, period=args.period, transform='none')
 
     def worker_init_fn(worker_id):
         np.random.seed(1 + worker_id)
 
-    dataloader = DataLoader(dataset,
-                            batch_size=1,
-                            shuffle=False,
-                            num_workers=cfg.DATA_WORKERS,
-                            worker_init_fn=worker_init_fn)
+    dataloader = Loader(dataset,
+                        batch_size=1,
+                        num_workers=cfg.DATA_WORKERS,
+                        distributed=ptu.distributed,
+                        )
 
     net = generate_net(cfg, batchnorm=nn.BatchNorm2d,
                        # dilated=cfg.MODEL_BACKBONE_DILATED,
@@ -64,14 +83,17 @@ def test_net():
     if cfg.TEST_CKPT is None:
         raise ValueError('test.py: cfg.MODEL_CKPT can not be empty in test period')
     print('start loading model %s' % cfg.TEST_CKPT)
-    model_dict = torch.load(cfg.TEST_CKPT)
+    model_dict = torch.load(cfg.TEST_CKPT, map_location=ptu.device)
     net.load_state_dict(model_dict, strict=False)
 
-    print('Use %d GPU' % cfg.GPUS)
-    assert torch.cuda.device_count() == cfg.GPUS
-    device = torch.device('cuda')
-    net.to(device)
+    # print('Use %d GPU' % cfg.GPUS)
+    # assert torch.cuda.device_count() == cfg.GPUS
+    # device = torch.device('cuda')
+    net.to(ptu.device)
     net.eval()
+    if ptu.distributed:
+        # model = DDP(model, device_ids=[ptu.device], find_unused_parameters=True)
+        net = DDP(net, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
 
     if cfg.TEST_SAVE is not None:
         Path(cfg.TEST_SAVE).mkdir(parents=True, exist_ok=True)
@@ -116,7 +138,7 @@ def test_net():
         result_sample = result_sample[keys]
         if cfg.TEST_SAVE is not None:
             np.save(os.path.join(cfg.TEST_SAVE, sample['name'][0] + '.npy'),
-                    {"prob": result_sample, "keys": keys})
+                    {"prob": result_sample, "keys": keys, "pred": result})
         return result
 
     def save_step_func(result_sample):
@@ -124,9 +146,12 @@ def test_net():
 
     result_list = single_gpu_test(net, dataloader, prepare_func=prepare_func, inference_func=inference_func,
                                   collect_func=collect_func, save_step_func=save_step_func)
-    resultlog = dataset.do_python_eval(cfg.MODEL_NAME)
-    print('Test finished')
-    writelog(cfg, period, metric=resultlog)
+    if ptu.distributed:
+        distributed.barrier()
+    if ptu.dist_rank == 0:
+        resultlog = dataset.do_python_eval(cfg.MODEL_NAME)
+        print('Test finished')
+        writelog(cfg, args.period, metric=resultlog)
 
 
 if __name__ == '__main__':

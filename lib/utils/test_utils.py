@@ -1,6 +1,7 @@
 import time
 import torch
 from tqdm import tqdm
+import utils.dist as ptu
 
 def single_gpu_test(model, dataloader, prepare_func, inference_func, collect_func, save_step_func=None):
 	model.eval()
@@ -8,7 +9,7 @@ def single_gpu_test(model, dataloader, prepare_func, inference_func, collect_fun
 	#assert n_gpus == 1
 	collect_list = []
 	total_num = len(dataloader)
-	with tqdm(total=total_num) as pbar:
+	with tqdm(total=total_num, position=ptu.dist_rank) as pbar:
 		with torch.no_grad():
 			for i_batch, sample in enumerate(dataloader):
 				name = sample['name']

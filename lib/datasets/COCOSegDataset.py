@@ -17,6 +17,8 @@ from utils.imutils import *
 from utils.registry import DATASETS
 from datasets.BaseDataset import BaseDataset
 
+import joblib
+
 
 @DATASETS.register_module
 class COCODataset(BaseDataset):
@@ -261,62 +263,76 @@ class COCODataset(BaseDataset):
     def do_python_eval(self, model_id):
         predict_folder = os.path.join(self.rst_dir, '%s_%s' % (model_id, self.period))
         gt_folder = self.seg_dir
-        TP = []
-        P = []
-        T = []
-        for i in range(self.num_categories):
-            TP.append(multiprocessing.Value('i', 0, lock=True))
-            P.append(multiprocessing.Value('i', 0, lock=True))
-            T.append(multiprocessing.Value('i', 0, lock=True))
 
-        def compare(start, step, TP, P, T):
-            for idx in range(start, len(self.name_list), step):
-                # print('%d/%d'%(idx,len(self.name_list)))
-                name = self.name_list[idx]
-                predict_file = os.path.join(predict_folder, '%s.png' % name)
-                gt_file = os.path.join(gt_folder, '%s.png' % name)
-                predict = np.array(Image.open(predict_file))  # cv2.imread(predict_file)
-                gt = np.array(Image.open(gt_file))
-                cal = gt < 255
-                mask = (predict == gt) * cal
+        def compare(idx):
+            name = self.name_list[idx]
+            predict_file = os.path.join(predict_folder, '%s.png' % name)
+            gt_file = os.path.join(gt_folder, '%s.png' % name)
+            predict = np.array(Image.open(predict_file))  # cv2.imread(predict_file)
+            gt = np.array(Image.open(gt_file))
+            cal = gt < 255
+            mask = (predict == gt) * cal
 
-                for i in range(self.num_categories):
-                    P[i].acquire()
-                    P[i].value += np.sum((predict == i) * cal)
-                    P[i].release()
-                    T[i].acquire()
-                    T[i].value += np.sum((gt == i) * cal)
-                    T[i].release()
-                    TP[i].acquire()
-                    TP[i].value += np.sum((gt == i) * mask)
-                    TP[i].release()
 
-        p_list = []
-        for i in range(8):
-            p = multiprocessing.Process(target=compare, args=(i, 8, TP, P, T))
-            p.start()
-            p_list.append(p)
-        for p in p_list:
-            p.join()
+            p_list, t_list, tp_list = [0] * self.num_categories, [0] * self.num_categories, [0] * self.num_categories
+            for i in range(self.num_categories):
+                p_list[i] += np.sum((predict == i) * cal)
+                t_list[i] += np.sum((gt == i) * cal)
+                tp_list[i] += np.sum((gt == i) * mask)
+
+            return p_list, t_list, tp_list
+
+        results = joblib.Parallel(n_jobs=10, verbose=10, pre_dispatch="all")(
+            [joblib.delayed(compare)(i) for i in range(len(self.name_list))]
+        )
+        p_lists, t_lists, tp_lists = zip(*results)
+        TP = [0] * self.num_categories
+        P = [0] * self.num_categories
+        T = [0] * self.num_categories
+        for idx in range(len(self.name_list)):
+            p_list = p_lists[idx]
+            t_list = t_lists[idx]
+            tp_list = tp_lists[idx]
+            for i in range(self.num_categories):
+                TP[i] += tp_list[i]
+                P[i] += p_list[i]
+                T[i] += t_list[i]
+
         IoU = []
+        T_TP = []
+        P_TP = []
+        FP_ALL = []
+        FN_ALL = []
         for i in range(self.num_categories):
-            IoU.append(TP[i].value / (T[i].value + P[i].value - TP[i].value))
+            IoU.append(TP[i] / (T[i] + P[i] - TP[i]))
+            T_TP.append(T[i] / (TP[i]))
+            P_TP.append(P[i] / (TP[i]))
+            FP_ALL.append((P[i] - TP[i]) / (T[i] + P[i] - TP[i]))
+            FN_ALL.append((T[i] - TP[i]) / (T[i] + P[i] - TP[i]))
         loglist = {}
         for i in range(self.num_categories):
             if i == 0:
-                print('%11s:%7.3f%%' % ('background', IoU[i] * 100), end='\t')
-                loglist['background'] = IoU[i] * 100
+                loglist["background"] = IoU[i] * 100
             else:
-                if i % 2 != 1:
-                    print('%11s:%7.3f%%' % (self.categories[i - 1], IoU[i] * 100), end='\t')
-                else:
-                    print('%11s:%7.3f%%' % (self.categories[i - 1], IoU[i] * 100))
-                loglist[self.categories[i - 1]] = IoU[i] * 100
-
+                loglist[self.categories[i-1]] = IoU[i] * 100
         miou = np.nanmean(np.array(IoU))
+        loglist['mIoU'] = miou * 100
+        fp = np.nanmean(np.array(FP_ALL))
+        loglist['FP'] = fp * 100
+        fn = np.nanmean(np.array(FN_ALL))
+        loglist['FN'] = fn * 100
+        for i in range(self.num_categories):
+            if i % 2 != 1:
+                if i == 0:
+                    print('%11s:%7.3f%%' % ("background", IoU[i] * 100), end='\t')
+                else:
+                    print('%11s:%7.3f%%' % (self.categories[i-1], IoU[i] * 100), end='\t')
+            else:
+                print('%11s:%7.3f%%' % (self.categories[i-1], IoU[i] * 100))
         print('\n======================================================')
         print('%11s:%7.3f%%' % ('mIoU', miou * 100))
-        loglist['mIoU'] = miou * 100
+        print('\n')
+        print(f'FP = {fp * 100}, FN = {fn * 100}')
         return loglist
 
     def __coco2voc(self, m):

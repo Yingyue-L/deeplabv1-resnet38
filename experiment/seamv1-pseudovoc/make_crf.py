@@ -5,7 +5,7 @@ import argparse
 import torch
 from PIL import Image
 import pandas as pd
-from densecrf import crf_inference
+from densecrf import crf_inference, crf_inference_coco
 from pathlib import Path
 
 import torch.nn.functional as F
@@ -115,6 +115,7 @@ if __name__ == '__main__':
     parser.add_argument("--n-jobs", default=10, type=int)
     parser.add_argument("--gt-folder", default="../../data/VOCdevkit/VOC2012/SegmentationClassAug")
     parser.add_argument("--num-cls", default=21, type=int)
+    parser.add_argument("--type", default="npy", type=str)
 
     args = parser.parse_args()
 
@@ -144,15 +145,22 @@ if __name__ == '__main__':
         path = os.path.join(args.predict_dir, name_list[i] + ".npy")
         seg_prob = np.load(path, allow_pickle=True).item()
         keys = seg_prob["keys"]
+        if "pred" in seg_prob:
+            predict = seg_prob["pred"]
         seg_prob = seg_prob["prob"]
 
         orig_image = np.asarray(Image.open(os.path.join(args.img_path, name_list[i] + ".jpg")).convert("RGB"))
-        seg_prob = F.softmax(torch.tensor(seg_prob), dim=0).cpu().numpy()
-        seg_prob = crf_inference(orig_image, seg_prob, labels=seg_prob.shape[0],
-                                 pos_sxy=pos_sxy, rgb_sxy=rgb_sxy, rgb=rgb, rgb_com=rgb_com)
+        if args.type == "npy":
+            seg_prob = F.softmax(torch.tensor(seg_prob), dim=0).cpu().numpy()
+            if num_cls == 21:
+                seg_prob = crf_inference(orig_image, seg_prob, labels=seg_prob.shape[0],
+                                     pos_sxy=pos_sxy, rgb_sxy=rgb_sxy, rgb=rgb, rgb_com=rgb_com)
+            elif num_cls == 91:
+                seg_prob = crf_inference_coco(orig_image, seg_prob, labels=seg_prob.shape[0])
 
-        seg_pred = np.argmax(seg_prob, axis=0)
-        predict = keys[seg_pred].astype(np.uint8)
+            seg_pred = np.argmax(seg_prob, axis=0)
+            predict = keys[seg_pred].astype(np.uint8)
+
 
         # predict_img = Image.fromarray(predict)
         # predict_img.save(os.path.join(args.predict_png_dir, name_list[i] + ".png"))
@@ -193,18 +201,18 @@ if __name__ == '__main__':
     FP_ALL = []
     FN_ALL = []
     for i in range(num_cls):
-        IoU.append(TP[i] / (T[i] + P[i] - TP[i] + 1e-10))
-        T_TP.append(T[i] / (TP[i] + 1e-10))
-        P_TP.append(P[i] / (TP[i] + 1e-10))
-        FP_ALL.append((P[i] - TP[i]) / (T[i] + P[i] - TP[i] + 1e-10))
-        FN_ALL.append((T[i] - TP[i]) / (T[i] + P[i] - TP[i] + 1e-10))
+        IoU.append(TP[i] / (T[i] + P[i] - TP[i]))
+        T_TP.append(T[i] / (TP[i]))
+        P_TP.append(P[i] / (TP[i]))
+        FP_ALL.append((P[i] - TP[i]) / (T[i] + P[i] - TP[i]))
+        FN_ALL.append((T[i] - TP[i]) / (T[i] + P[i] - TP[i]))
     loglist = {}
     for i in range(num_cls):
         if num_cls == 21:
             loglist[categories[i]] = IoU[i] * 100
         else:
             loglist[categories_coco[i]] = IoU[i] * 100
-    miou = np.mean(np.array(IoU))
+    miou = np.nanmean(np.array(IoU))
     if miou > best_miou:
         best_miou = miou
                 #     best_rgb = rgb
@@ -219,9 +227,9 @@ if __name__ == '__main__':
                 #       )
 
     loglist['mIoU'] = best_miou * 100
-    fp = np.mean(np.array(FP_ALL))
+    fp = np.nanmean(np.array(FP_ALL))
     loglist['FP'] = fp * 100
-    fn = np.mean(np.array(FN_ALL))
+    fn = np.nanmean(np.array(FN_ALL))
     loglist['FN'] = fn * 100
     for i in range(num_cls):
         if num_cls == 21:
