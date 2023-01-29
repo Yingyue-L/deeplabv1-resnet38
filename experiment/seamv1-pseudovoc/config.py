@@ -71,7 +71,7 @@ config_dict['TRAIN_CKPT'] = None
 #                                                                  '/deeplabv1_resnet38_COCODataset_epoch1.pth')
 config_dict['LOG_DIR'] = os.path.join(config_dict['ROOT_DIR'], 'log', config_dict['EXP_NAME'])
 config_dict['TEST_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}'
-                                                                 '/deeplabv1_resnet38_COCODataset_epoch0.pth')
+                                                                 '/deeplabv1_resnet38_COCODataset_epoch3.pth')
 # config_dict['TEST_SAVE'] = None
 config_dict['TEST_SAVE'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}/val')
 sys.path.insert(0, os.path.join(config_dict['ROOT_DIR'], 'lib'))
