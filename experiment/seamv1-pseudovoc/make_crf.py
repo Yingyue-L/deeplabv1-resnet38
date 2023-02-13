@@ -108,12 +108,23 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--list",
                         default='../../data/VOCdevkit/VOC2012/ImageSets/Segmentation/val.txt',
+                        # default='../../data/COCO14/voc_format/val_exist.txt',
                         type=str)
-    parser.add_argument("--predict-dir", default="../../model/WeakTrRW_3090/val", type=str)
-    parser.add_argument("--predict-png-dir", default="../../model/WeakTrRW_3090/val_png", type=str)
-    parser.add_argument("--img-path", default='../../data/VOCdevkit/VOC2012/JPEGImages', type=str)
+    parser.add_argument("--predict-dir", default="../../model/WeakTrMask_lr0.002/val", type=str)
+    parser.add_argument("--predict-png-dir",
+                        # default=None,
+                        default="../../model/WeakTrMask_lr0.002/val_png",
+                        type=str)
+    parser.add_argument("--img-path",
+                        default='../../data/VOCdevkit/VOC2012/JPEGImages',
+                        # default='../../data/COCO14/images',
+                        type=str)
     parser.add_argument("--n-jobs", default=10, type=int)
-    parser.add_argument("--gt-folder", default="../../data/VOCdevkit/VOC2012/SegmentationClassAug")
+    parser.add_argument("--gt-folder",
+                        # default=None
+                        default="../../data/VOCdevkit/VOC2012/SegmentationClassAug"
+                        # default="../../data/COCO14/voc_format/class_labels"
+                        )
     parser.add_argument("--num-cls", default=21, type=int)
     parser.add_argument("--type", default="npy", type=str)
 
@@ -125,22 +136,6 @@ if __name__ == '__main__':
         Path(args.predict_png_dir).mkdir(parents=True, exist_ok=True)
     num_cls = args.num_cls
     best_miou = 0
-    best_pos_sxy = 0
-    best_rgb_sxy = 0
-    best_rgb = 0
-    best_rgb_com = 0
-    pos_sxy = 1
-    rgb_sxy = 112
-    rgb = 2
-    rgb_com = 3
-    # for rgb_sxy in range(99,120):
-    #     for rgb in range(1, 5):
-    #         for rgb_com in range(1, 5):
-    #             print(f"pos_sxy:{pos_sxy}\n"
-    #                   f"rgb_sxy:{rgb_sxy}\n"
-    #                   f"rgb:{rgb}\n"
-    #                   f"rgb_com:{rgb_com}\n"
-    #                   )
     def compute(i):
         path = os.path.join(args.predict_dir, name_list[i] + ".npy")
         seg_prob = np.load(path, allow_pickle=True).item()
@@ -153,35 +148,37 @@ if __name__ == '__main__':
         if args.type == "npy":
             seg_prob = F.softmax(torch.tensor(seg_prob), dim=0).cpu().numpy()
             if num_cls == 21:
-                seg_prob = crf_inference(orig_image, seg_prob, labels=seg_prob.shape[0],
-                                     pos_sxy=pos_sxy, rgb_sxy=rgb_sxy, rgb=rgb, rgb_com=rgb_com)
+                seg_prob = crf_inference(orig_image, seg_prob, labels=seg_prob.shape[0])
             elif num_cls == 91:
                 seg_prob = crf_inference_coco(orig_image, seg_prob, labels=seg_prob.shape[0])
 
             seg_pred = np.argmax(seg_prob, axis=0)
             predict = keys[seg_pred].astype(np.uint8)
 
+        if args.predict_png_dir is not None:
+            predict_img = Image.fromarray(predict)
+            predict_img.save(os.path.join(args.predict_png_dir, name_list[i] + ".png"))
+        if args.gt_folder is not None:
+            gt_file = os.path.join(args.gt_folder, name_list[i] + ".png")
+            gt = np.array(Image.open(gt_file))
+            cal = gt < 255
+            mask = (predict == gt) * cal
 
-        # predict_img = Image.fromarray(predict)
-        # predict_img.save(os.path.join(args.predict_png_dir, name_list[i] + ".png"))
+            p_list, t_list, tp_list = [0] * args.num_cls, [0] * args.num_cls, [0] * args.num_cls
+            for i in range(args.num_cls):
+                p_list[i] += np.sum((predict == i) * cal)
+                t_list[i] += np.sum((gt == i) * cal)
+                tp_list[i] += np.sum((gt == i) * mask)
 
-        gt_file = os.path.join(args.gt_folder, name_list[i] + ".png")
-        gt = np.array(Image.open(gt_file))
-        cal = gt < 255
-        mask = (predict == gt) * cal
-
-        p_list, t_list, tp_list = [0] * args.num_cls, [0] * args.num_cls, [0] * args.num_cls
-        for i in range(args.num_cls):
-            p_list[i] += np.sum((predict == i) * cal)
-            t_list[i] += np.sum((gt == i) * cal)
-            tp_list[i] += np.sum((gt == i) * mask)
-
-        return p_list, t_list, tp_list
+            return p_list, t_list, tp_list
 
 
     results = joblib.Parallel(n_jobs=args.n_jobs, verbose=10, pre_dispatch="all")(
         [joblib.delayed(compute)(i) for i in range(len(name_list))]
     )
+    if args.gt_folder is None:
+        import sys
+        sys.exit()
     p_lists, t_lists, tp_lists = zip(*results)
     TP = [0] * num_cls
     P = [0] * num_cls
@@ -200,12 +197,16 @@ if __name__ == '__main__':
     P_TP = []
     FP_ALL = []
     FN_ALL = []
+    Pred = []
+    Recall = []
     for i in range(num_cls):
         IoU.append(TP[i] / (T[i] + P[i] - TP[i]))
         T_TP.append(T[i] / (TP[i]))
         P_TP.append(P[i] / (TP[i]))
         FP_ALL.append((P[i] - TP[i]) / (T[i] + P[i] - TP[i]))
         FN_ALL.append((T[i] - TP[i]) / (T[i] + P[i] - TP[i]))
+        Pred.append(TP[i]/P[i])
+        Recall.append(TP[i]/T[i])
     loglist = {}
     for i in range(num_cls):
         if num_cls == 21:
@@ -231,6 +232,8 @@ if __name__ == '__main__':
     loglist['FP'] = fp * 100
     fn = np.nanmean(np.array(FN_ALL))
     loglist['FN'] = fn * 100
+    prediction = np.nanmean(np.array(Pred))
+    recall = np.nanmean(np.array(Recall))
     for i in range(num_cls):
         if num_cls == 21:
             if i % 2 != 1:
@@ -246,3 +249,4 @@ if __name__ == '__main__':
     print('%11s:%7.3f%%' % ('mIoU', miou * 100))
     print('\n')
     print(f'FP = {fp * 100}, FN = {fn * 100}')
+    print(f'Prediction = {prediction * 100}%, Recall = {recall * 100}%')
