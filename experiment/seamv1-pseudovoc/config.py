@@ -9,17 +9,17 @@ import cv2
 import time
 
 config_dict = {
-    # 'EXP_NAME': 'WeakTrMask_lr0.0008',
-    # 'DATA_NAME': 'VOCDataset',
-    # 'DATA_PSEUDO_GT': 'WeakTrMask',
-    # 'MODEL_NUM_CLASSES': 21,
-    # 'TRAIN_ITERATION': 20000,
-    'TRAIN_LR': 0.0015,
-    'TRAIN_ITERATION': 40000,
-    'EXP_NAME': 'WeakTrCOCOMask_lr0.0015_itr40000',
-    'DATA_NAME': 'COCODataset',
-    'DATA_PSEUDO_GT': 'WeakTrCOCOMask',
-    'MODEL_NUM_CLASSES': 91,
+    'EXP_NAME': 'WeakTrMask_lr0.0008',
+    'DATA_NAME': 'VOCDataset',
+    'DATA_PSEUDO_GT': 'WeakTrMask',
+    'MODEL_NUM_CLASSES': 21,
+    'TRAIN_ITERATION': 20000,
+    'TRAIN_LR': 0.0008,
+    # 'TRAIN_ITERATION': 40000,
+    # 'EXP_NAME': 'WeakTrCOCOMask_lr0.0015_itr40000',
+    # 'DATA_NAME': 'COCODataset',
+    # 'DATA_PSEUDO_GT': 'WeakTrCOCOMask',
+    # 'MODEL_NUM_CLASSES': 91,
 
     'GPUS': 2,
 
@@ -36,7 +36,6 @@ config_dict = {
     'DATA_RANDOM_S': 10,
     'DATA_RANDOM_V': 10,
     'DATA_RANDOMFLIP': 0.5,
-    # 'DATA_PSEUDO_GT': 'AffinityNet@resnet38@WeakTr@trainaug@beta=10@exp_times=8@rw@power2.5@crf',
 
     
     'MODEL_NAME': 'deeplabv1',
