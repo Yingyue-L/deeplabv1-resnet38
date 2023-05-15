@@ -209,6 +209,7 @@ pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/linux,visualstudiocode,python
 experiment/seamv1-pseudovoc/WeakTrMask
+experiment/seamv1-pseudovoc/pred_png
 model/*
 data
 log/*

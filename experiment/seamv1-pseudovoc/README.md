@@ -18,8 +18,17 @@ Please modify the configration in `config.py` according to your device firstly.
 python train.py
 ```
 Don't forget to check test configration in `config.py` then
-```
-python test.py
+```bash
+python -m torch.distributed.launch --nproc_per_node 2 test.py
+
+python make_crf.py \
+--list val.txt \
+--data-path ../../data \
+--predict-dir ../../model/pred_png_lr0.0008/val \
+--predict-png-dir ../../model/pred_png_lr0.0008/val_png \
+--num-cls 21 \
+--dataset voc12 \
+
 ```
 
 ## Citation
