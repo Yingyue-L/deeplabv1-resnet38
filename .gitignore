@@ -213,3 +213,4 @@ experiment/seamv1-pseudovoc/pred_png
 model/*
 data
 log/*
+experiment/seamv1-pseudovoc/ilsvrc-cls_rna-a1_cls1000_ep-0001.params
