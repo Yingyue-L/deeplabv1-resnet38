@@ -45,8 +45,9 @@ parser.add_argument("--local_rank", default=None, type=int)
 parser.add_argument("--period", default="val", type=str)
 
 args = parser.parse_args()
-torch.cuda.set_device(args.local_rank)
-torch.distributed.init_process_group(backend="nccl", init_method="env://")
+if args.local_rank is not None:
+    torch.cuda.set_device(args.local_rank)
+    torch.distributed.init_process_group(backend="nccl", init_method="env://")
 ptu.set_gpu_dist_mode(True)
 
 cfg = Configuration(config_dict, False)
