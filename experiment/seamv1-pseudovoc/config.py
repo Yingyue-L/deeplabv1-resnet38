@@ -9,17 +9,17 @@ import cv2
 import time
 
 config_dict = {
-    'EXP_NAME': 'pred_png_lr0.001',
-    'DATA_NAME': 'VOCDataset',
-    'DATA_PSEUDO_GT': 'pred_png',
-    'MODEL_NUM_CLASSES': 21,
-    'TRAIN_ITERATION': 20000,
+    # 'EXP_NAME': 'voc_denseclip_lr0.001_plus20000',
+    # 'DATA_NAME': 'VOCDataset',
+    # 'DATA_PSEUDO_GT': 'voc_denseclip',
+    # 'MODEL_NUM_CLASSES': 21,
+    # 'TRAIN_ITERATION': 20000,
     'TRAIN_LR': 0.001,
-    # 'TRAIN_ITERATION': 40000,
-    # 'EXP_NAME': 'WeakTrCOCOMask_lr0.0015_itr40000',
-    # 'DATA_NAME': 'COCODataset',
-    # 'DATA_PSEUDO_GT': 'WeakTrCOCOMask',
-    # 'MODEL_NUM_CLASSES': 91,
+    'TRAIN_ITERATION': 40000,
+    'EXP_NAME': 'coco_denseclip_lr0.001_itr40000',
+    'DATA_NAME': 'COCODataset',
+    'DATA_PSEUDO_GT': 'coco_denseclip',
+    'MODEL_NUM_CLASSES': 91,
 
     'GPUS': 2,
 
@@ -70,7 +70,7 @@ config_dict['TRAIN_CKPT'] = None
 #                                                                  '/deeplabv1_resnet38_COCODataset_epoch1.pth')
 config_dict['LOG_DIR'] = os.path.join(config_dict['ROOT_DIR'], 'log', config_dict['EXP_NAME'])
 config_dict['TEST_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}'
-                                                                 '/deeplabv1_resnet38_VOCDataset_itr20000_all.pth')
+                                                                 '/deeplabv1_resnet38_COCODataset_itr20000_all.pth')
 # config_dict['TEST_SAVE'] = None
 config_dict['TEST_SAVE'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}/val')
 sys.path.insert(0, os.path.join(config_dict['ROOT_DIR'], 'lib'))

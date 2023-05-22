@@ -14,18 +14,29 @@ ImageNet pretrained ResNet38 model can be downloaded in [SEAM](https://github.co
 
 ## Usage
 Please modify the configration in `config.py` according to your device firstly.
-```
+```bash
 python train.py
 ```
 Don't forget to check test configration in `config.py` then
+
 ```bash
-python -m torch.distributed.launch --nproc_per_node 2 test.py
+python -m torch.distributed.launch --nproc_per_node 2 --master_port 20201 test.py
 
 python make_crf.py \
 --list val.txt \
 --data-path ../../data \
---predict-dir ../../model/pred_png_lr0.0008/val \
---predict-png-dir ../../model/pred_png_lr0.0008/val_png \
+--predict-dir ../../model/pred_png_lr0.001_plus20000/val \
+--predict-png-dir ../../model/pred_png_lr0.001_plus20000/val_png \
+--num-cls 21 \
+--dataset voc12 \
+
+python -m torch.distributed.launch --nproc_per_node 2 --master_port 20201 test.py --period test
+
+python make_crf.py \
+--list test.txt \
+--data-path ../../data \
+--predict-dir ../../model/pred_png_lr0.001_plus20000/test \
+--predict-png-dir ../../model/pred_png_lr0.001_plus20000/test_png \
 --num-cls 21 \
 --dataset voc12 \
 
