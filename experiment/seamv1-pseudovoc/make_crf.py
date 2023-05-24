@@ -126,7 +126,7 @@ if __name__ == '__main__':
         args.list = os.path.join(args.data_path / "ImageSets" / "Segmentation", args.list)
 
     if args.dataset == "coco":
-        args.data_path = Path(args.data_path) / "coco" if "coco" not in args.data_path else args.data_path
+        args.data_path = Path(args.data_path) / "COCO14" if "COCO14" not in args.data_path else args.data_path
         args.gt_folder = args.data_path / "voc_format" / "class_labels"
         args.img_path = args.data_path / "images"
         args.list = os.path.join(args.data_path / "voc_format", args.list)
