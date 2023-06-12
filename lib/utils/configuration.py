@@ -5,12 +5,14 @@ import torch
 import os
 import sys
 import shutil
+import utils.dist as ptu
 
 class Configuration():
 	def __init__(self, config_dict, clear=True):
 		self.__dict__ = config_dict
 		self.clear = clear
-		self.__check()
+		if ptu.dist_rank == 0:
+			self.__check()
 		
 	def __check(self):
 		if not torch.cuda.is_available():
