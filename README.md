@@ -1,23 +1,44 @@
-# semantic-segmentation-codebase
-Here is a pytorch codebase for semantic segmentation experiments.
+# DeeplabV1 ResNet38 Retrain
 
 
-## Installation
-- Download the repository.
-```
-git clone https://github.com/YudeWang/semantic-segmentation-codebase.git
-```
-- Install python dependencies.
-```
-pip install -r requirements.txt
-```
-- Create softlink to your dataset. Make sure that the dataset can be accessed by `$your_dataset_path/VOCdevkit/VOC2012...`
-```
-ln -s $your_dataset_path data
+Make sure you move to the root dir `deeplabv1-resnet38`.
+
+First download the ResNet38 pretrain from [here](https://drive.google.com/file/d/16Ij5lqBExoZT7ijERiBBJYZh5qMDT2Z1/view?usp=share_link), then move the Pseudo Mask here.
+
+## Training
+Please modify the configration in [config.py](tools/config.py) according to your device firstly.
+```bash
+CUDA_VISIBLE_DEVICES=0,1 python tools/train.py
 ```
 
-## Experiments
-Our experiments are placed in `.experiment/` and here are some implementations:
-- DeepLabv3+ on VOC2012 dataset. [link](https://github.com/YudeWang/semantic-segmentation-codebase/tree/main/experiment/deeplabv3%2Bvoc)
-- DeepLabv1 retrain on [SEAM](https://github.com/YudeWang/SEAM) pseudo labels. [link](https://github.com/YudeWang/semantic-segmentation-codebase/tree/main/experiment/seamv1-pseudovoc)
-- Coming soon...
+## Test
+
+
+Don't forget to check test configration in [config.py](tools/config.py) then
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1 python tools/test.py --period val_5000
+```
+
+## CRF Postprocess
+### VOC12
+```bash
+python tools/make_crf.py \
+--list val.txt \
+--data-path data \
+--predict-dir prob_npy \
+--predict-png-dir pred_png \
+--num-cls 21 \
+--dataset voc12
+```
+
+### COCO14
+```bash
+python tools/make_crf.py \
+--list val.txt \
+--data-path data \
+--predict-dir prob_npy \
+--predict-png-dir pred_png \
+--num-cls 91 \
+--dataset coco
+```

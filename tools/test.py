@@ -1,6 +1,7 @@
 # ----------------------------------------
 # Written by Yude Wang
 # ----------------------------------------
+import os.path
 
 import torch
 import numpy as np
@@ -29,6 +30,19 @@ from utils.DenseCRF import dense_crf
 from utils.test_utils import single_gpu_test
 from utils.imutils import onehot
 
+from pathlib import Path
+
+import utils.dist as ptu
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch import distributed
+
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--period", default="val", type=str)
+
+args = parser.parse_args()
+
 cfg = Configuration(config_dict, False)
 
 def ClassLogSoftMax(f, category):
@@ -39,8 +53,7 @@ def ClassLogSoftMax(f, category):
 	return softmax, logsoftmax
 
 def test_net():
-	period = 'val'
-	dataset = generate_dataset(cfg, period=period, transform='none')
+	dataset = generate_dataset(cfg, period=args.period, transform='none')
 	def worker_init_fn(worker_id):
 		np.random.seed(1 + worker_id)
 	dataloader = DataLoader(dataset, 
@@ -49,13 +62,13 @@ def test_net():
 				num_workers=cfg.DATA_WORKERS,
 				worker_init_fn = worker_init_fn)
 	
-	net = generate_net(cfg, batchnorm=nn.BatchNorm2d, dilated=cfg.MODEL_BACKBONE_DILATED, multi_grid=cfg.MODEL_BACKBONE_MULTIGRID, deep_base=cfg.MODEL_BACKBONE_DEEPBASE)
+	net = generate_net(cfg, batchnorm=nn.BatchNorm2d)
 	print('net initialize')
 
 	if cfg.TEST_CKPT is None:
 		raise ValueError('test.py: cfg.MODEL_CKPT can not be empty in test period')
 	print('start loading model %s'%cfg.TEST_CKPT)
-	model_dict = torch.load(cfg.TEST_CKPT)
+	model_dict = torch.load(cfg.TEST_CKPT, map_location=ptu.device)
 	net.load_state_dict(model_dict, strict=False)
 
 	print('Use %d GPU'%cfg.GPUS)
@@ -63,6 +76,10 @@ def test_net():
 	device = torch.device('cuda')
 	net.to(device)
 	net.eval()
+
+
+	if cfg.TEST_SAVE is not None:
+		Path(cfg.TEST_SAVE).mkdir(parents=True, exist_ok=True)
 
 	def prepare_func(sample):	
 		image_msf = []
@@ -85,25 +102,27 @@ def test_net():
 				result_seg = torch.flip(result_seg, [3])
 			result_list[i] = result_seg
 		prob_seg = torch.cat(result_list, dim=0)
+		prob_seg = torch.mean(prob_seg, dim=0, keepdim=True)
+		result_sample = prob_seg[0].cpu().numpy()
 		prob_seg = F.softmax(torch.mean(prob_seg, dim=0, keepdim=True),dim=1)[0]
 		
 
-		if cfg.TEST_CRF:
-			prob = prob_seg.cpu().numpy()
-			img_batched = img_denorm(sample['image'][0].cpu().numpy()).astype(np.uint8)
-			prob = dense_crf(prob, img_batched, n_classes=cfg.MODEL_NUM_CLASSES, n_iters=1)
-			prob_seg = torch.from_numpy(prob.astype(np.float32))
 
 		result = torch.argmax(prob_seg, dim=0, keepdim=False).cpu().numpy()
+		keys = np.unique(result)
+		result_sample = result_sample[keys]
+		if cfg.TEST_SAVE is not None:
+			np.save(os.path.join(cfg.TEST_SAVE, sample['name'][0] + '.npy'),
+                    {"prob": result_sample, "keys": keys, "pred": result})
 		return result
 
 	def save_step_func(result_sample):
 		dataset.save_result([result_sample], cfg.MODEL_NAME)
 
-	result_list = single_gpu_test(net, dataloader, prepare_func=prepare_func, inference_func=inference_func, collect_func=collect_func, save_step_func=save_step_func)
+	result_list = single_gpu_test(net, dataloader, prepare_func=prepare_func, inference_func=inference_func, collect_func=collect_func, save_step_func=save_step_func, save_path=cfg.TEST_SAVE)
 	resultlog = dataset.do_python_eval(cfg.MODEL_NAME)
 	print('Test finished')
-	writelog(cfg, period, metric=resultlog)
+	writelog(cfg, args.period, metric=resultlog)
 
 if __name__ == '__main__':
 	test_net()
