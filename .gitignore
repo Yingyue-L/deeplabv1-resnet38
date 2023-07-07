@@ -212,7 +212,7 @@ model/
 data
 log/
 ilsvrc-cls_rna-a1_cls1000_ep-0001.params
-*PGT
+*PGT*
 prob_npy
 pred_png
 tools/utils/split_txt.py

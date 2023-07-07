@@ -33,7 +33,39 @@ from net.sync_batchnorm import SynchronizedBatchNorm2d
 from utils.visualization import generate_vis, max_norm
 from tqdm import tqdm
 
+from utils.test_utils import single_gpu_test
+
 cfg = Configuration(config_dict)
+
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--period", default="val_5000", type=str)
+parser.add_argument("--batchsize", default=None, type=int)
+parser.add_argument("--lr", default=None, type=float)
+parser.add_argument("--iter", default=None, type=int)
+parser.add_argument("--eval_step", default=1000, type=int)
+
+args = parser.parse_args()
+if args.batchsize is not None:
+	cfg.TRAIN_BATCHES = args.batchsize
+if args.lr is not None:
+	cfg.TRAIN_LR = args.lr
+if args.iter is not None:
+	cfg.TRAIN_ITERATION = args.iter
+
+cfg.EXP_NAME = cfg.EXP_NAME + '_bs' + str(cfg.TRAIN_BATCHES) + '_lr' + str(cfg.TRAIN_LR) + '_iter' + str(cfg.TRAIN_ITERATION) + '_gpu' + str(cfg.GPUS)
+cfg.MODEL_SAVE_DIR = os.path.join(cfg.ROOT_DIR, 'model', cfg.EXP_NAME)
+cfg.LOG_DIR = os.path.join(cfg.ROOT_DIR, 'log', cfg.EXP_NAME)
+
+if not os.path.isdir(cfg.LOG_DIR):
+	os.makedirs(cfg.LOG_DIR)
+if not os.path.isdir(cfg.MODEL_SAVE_DIR):
+	os.makedirs(cfg.MODEL_SAVE_DIR)
+# 保存config文件
+with open(os.path.join(cfg.MODEL_SAVE_DIR, 'config.txt'), 'w') as f:
+	for k, v in config_dict.items():
+		f.write(k + ':' + str(v) + '\n')
 
 def train_net():
 	period = 'train'
@@ -48,6 +80,13 @@ def train_net():
 				pin_memory=True,
 				drop_last=True,
 				worker_init_fn=worker_init_fn)
+	# eval dataset
+	eval_dataset = generate_dataset(cfg, period=args.period, transform='none')
+	eval_dataloader = DataLoader(eval_dataset, 
+				batch_size=1, 
+				shuffle=False, 
+				num_workers=cfg.DATA_WORKERS,
+				worker_init_fn = worker_init_fn)
 	
 	net = generate_net(cfg, batchnorm=nn.BatchNorm2d)
 	if cfg.TRAIN_CKPT:
@@ -83,10 +122,53 @@ def train_net():
 	max_epoch = max_itr*(cfg.TRAIN_BATCHES)//len(dataset)+1
 	tblogger = SummaryWriter(cfg.LOG_DIR)
 	criterion = nn.CrossEntropyLoss(ignore_index=255)
+	def prepare_func(sample):	
+		image_msf = []
+		for rate in cfg.TEST_MULTISCALE:
+			inputs_batched = sample['image_%f'%rate]
+			image_msf.append(inputs_batched)
+			if cfg.TEST_FLIP:
+				image_msf.append(torch.flip(inputs_batched,[3]))
+		return image_msf
+
+	def inference_func(model, img):
+		seg = model(img)
+		return seg
+
+	def collect_func(result_list, sample):
+		[batch, channel, height, width] = sample['image'].size()
+		for i in range(len(result_list)):
+			result_seg = F.interpolate(result_list[i], (height, width), mode='bilinear', align_corners=True)	
+			if cfg.TEST_FLIP and i % 2 == 1:
+				result_seg = torch.flip(result_seg, [3])
+			result_list[i] = result_seg
+		prob_seg = torch.cat(result_list, dim=0)
+		prob_seg = torch.mean(prob_seg, dim=0, keepdim=True)
+		result_sample = prob_seg[0].cpu().numpy()
+		prob_seg = F.softmax(torch.mean(prob_seg, dim=0, keepdim=True),dim=1)[0]
+		
+		result = torch.argmax(prob_seg, dim=0, keepdim=False).cpu().numpy()
+		keys = np.unique(result)
+		result_sample = result_sample[keys]
+		return result
+
+	def save_step_func(result_sample):
+		eval_dataset.save_result([result_sample], cfg.EXP_NAME)
+
 	with tqdm(total=max_itr) as pbar:
 		for epoch in range(cfg.TRAIN_MINEPOCH, max_epoch):
 			for i_batch, sample in enumerate(dataloader):
+				if (itr+1) % args.eval_step == 0:
+					net.eval()
+					single_gpu_test(net, eval_dataloader, prepare_func=prepare_func, inference_func=inference_func, collect_func=collect_func, save_step_func=save_step_func, save_path=cfg.TEST_SAVE)
+					resultlog = eval_dataset.do_python_eval(cfg.EXP_NAME)
+					# 写出eval结果
+					for k,v in resultlog.items():
+						with open(os.path.join(cfg.MODEL_SAVE_DIR, f"resultlog_{args.period}.txt"), 'a') as f:
+							f.write('epoch:%d\titer:%d\t%s:%g\n'%(epoch,itr,k,v))
 
+					print('Test finished')
+					net.train()
 				now_lr = adjust_lr(optimizer, itr, max_itr, cfg.TRAIN_LR, cfg.TRAIN_POWER)
 				optimizer.zero_grad()
 
@@ -124,9 +206,30 @@ def train_net():
 			save_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_epoch%d.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,epoch))
 			torch.save(parameter_source.state_dict(), save_path)
 			print('%s has been saved'%save_path)
-			remove_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_epoch%d.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,epoch-1))
-			if os.path.exists(remove_path):
-				os.remove(remove_path)
+			# remove_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_epoch%d.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,epoch-1))
+			# if os.path.exists(remove_path):
+			# 	os.remove(remove_path)
+			net.eval()
+			single_gpu_test(net, eval_dataloader, prepare_func=prepare_func, inference_func=inference_func, collect_func=collect_func, save_step_func=save_step_func, save_path=cfg.TEST_SAVE)
+			resultlog = eval_dataset.do_python_eval(cfg.EXP_NAME)
+			# 写出eval结果
+			for k,v in resultlog.items():
+				with open(os.path.join(cfg.MODEL_SAVE_DIR, f"resultlog_{args.period}.txt"), 'a') as f:
+					f.write('epoch:%d\t%s:%g\n'%(epoch,k,v))
+
+			print('Test finished')
+			net.train()
+		
+
+	net.eval()
+	single_gpu_test(net, eval_dataloader, prepare_func=prepare_func, inference_func=inference_func, collect_func=collect_func, save_step_func=save_step_func, save_path=cfg.TEST_SAVE)
+	resultlog = eval_dataset.do_python_eval(cfg.EXP_NAME)
+	# 写出eval结果
+	for k,v in resultlog.items():
+		with open(os.path.join(cfg.MODEL_SAVE_DIR, f"resultlog_{args.period}.txt"), 'a') as f:
+			f.write('epoch:%d\t%s:%g\n'%(epoch,k,v))
+
+	print('Test finished')
 			
 	save_path = os.path.join(cfg.MODEL_SAVE_DIR,'%s_%s_%s_itr%d_all.pth'%(cfg.MODEL_NAME,cfg.MODEL_BACKBONE,cfg.DATA_NAME,cfg.TRAIN_ITERATION))
 	torch.save(parameter_source.state_dict(),save_path)

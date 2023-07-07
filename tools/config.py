@@ -17,8 +17,8 @@ config_dict = {
     # 'MODEL_NUM_CLASSES': 21,
 
     'TRAIN_LR': 0.0015,
-    'TRAIN_ITERATION': 40000,
-    'EXP_NAME': 'COCOWeakCLIP_plusitr40000_plusitr40000',
+    'TRAIN_ITERATION': 160000,
+    'EXP_NAME': 'COCOWeakCLIPPGT_48p11',
     'DATA_NAME': 'COCODataset',
     'DATA_PSEUDO_GT': 'COCOWeakCLIPPGT',
     'MODEL_NUM_CLASSES': 91,
@@ -29,7 +29,7 @@ config_dict = {
 
     'DATA_YEAR': 2012,
     'DATA_AUG': True,
-    'DATA_WORKERS': 4,
+    'DATA_WORKERS': 2,
     'DATA_MEAN': [0.485, 0.456, 0.406],
     'DATA_STD': [0.229, 0.224, 0.225],
     'DATA_RANDOMCROP': 448,
@@ -67,11 +67,11 @@ config_dict = {
 
 config_dict['ROOT_DIR'] = os.path.abspath(os.path.join(os.path.dirname("__file__")))
 config_dict['MODEL_SAVE_DIR'] = os.path.join(config_dict['ROOT_DIR'], 'model', config_dict['EXP_NAME'])
-config_dict['TRAIN_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/COCOWeakCLIP_plusitr40000'
-                                                                 '/deeplabv1_resnet38_COCODataset_itr40000_all.pth')
+config_dict['TRAIN_CKPT'] = None
+# config_dict['TRAIN_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/coco_mct_denseclip_lr0.0015_itr160000/deeplabv1_resnet38_COCODataset_itr160000_all.pth')
 config_dict['LOG_DIR'] = os.path.join(config_dict['ROOT_DIR'], 'log', config_dict['EXP_NAME'])
 config_dict['TEST_CKPT'] = os.path.join(config_dict['ROOT_DIR'], f'model/{config_dict["EXP_NAME"]}'
-                                                                 '/deeplabv1_resnet38_COCODataset_itr40000_all.pth')
+                                                                 '/deeplabv1_resnet38_COCODataset_itr160000_all.pth')
 config_dict['TEST_SAVE'] = None
 # config_dict['TEST_SAVE'] = os.path.join(config_dict['ROOT_DIR'], f'prob_npy')
 sys.path.insert(0, os.path.join(config_dict['ROOT_DIR'], 'lib'))

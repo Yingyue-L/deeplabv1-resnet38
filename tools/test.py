@@ -117,10 +117,10 @@ def test_net():
 		return result
 
 	def save_step_func(result_sample):
-		dataset.save_result([result_sample], cfg.MODEL_NAME)
+		dataset.save_result([result_sample], cfg.EXP_NAME)
 
 	result_list = single_gpu_test(net, dataloader, prepare_func=prepare_func, inference_func=inference_func, collect_func=collect_func, save_step_func=save_step_func, save_path=cfg.TEST_SAVE)
-	resultlog = dataset.do_python_eval(cfg.MODEL_NAME)
+	resultlog = dataset.do_python_eval(cfg.EXP_NAME)
 	print('Test finished')
 	writelog(cfg, args.period, metric=resultlog)
 

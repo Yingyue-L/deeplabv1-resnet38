@@ -19,8 +19,9 @@ class Configuration():
 			raise ValueError('config.py: cuda is not avalable')
 		if self.GPUS == 0:
 			raise ValueError('config.py: the number of GPU is 0')
-		if self.GPUS != torch.cuda.device_count():
-			raise ValueError('config.py: GPU number is not matched')
+		# if self.GPUS != torch.cuda.device_count():
+		# 	raise ValueError('config.py: GPU number is not matched')
+		self.GPUS = torch.cuda.device_count()
 		if not os.path.isdir(self.LOG_DIR):
 			os.makedirs(self.LOG_DIR)
 		elif self.clear:
