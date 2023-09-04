@@ -217,3 +217,4 @@ prob_npy
 pred_png
 tools/utils/split_txt.py
 tools/utils/val_tmp.py
+res38_cls.pth

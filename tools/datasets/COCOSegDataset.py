@@ -18,8 +18,8 @@ import joblib
 
 @DATASETS.register_module
 class COCODataset(BaseDataset):
-    def __init__(self, cfg, period, transform='none'):
-        super(COCODataset, self).__init__(cfg, period, transform)
+    def __init__(self, cfg, period, transform='none', save_path=None):
+        super(COCODataset, self).__init__(cfg, period, transform, save_path)
         self.dataset_name = "COCO14"
         self.root_dir = os.path.join(cfg.ROOT_DIR, 'data')
         self.dataset_dir = os.path.join(self.root_dir, self.dataset_name)
@@ -217,7 +217,7 @@ class COCODataset(BaseDataset):
 
         """
         folder_path = os.path.join(self.rst_dir, '%s_%s' % (model_id, self.period))
-        if not os.path.exists(folder_path):
+        if not os.path.exists(folder_path) and torch.distributed.get_rank() == 0:
             os.makedirs(folder_path)
 
         for sample in result_list:

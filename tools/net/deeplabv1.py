@@ -17,7 +17,8 @@ class deeplabv1(nn.Module):
 		self.cfg = cfg
 		self.batchnorm = batchnorm
 		#self.backbone = build_backbone(self.cfg.MODEL_BACKBONE, os=self.cfg.MODEL_OUTPUT_STRIDE)
-		self.backbone = build_backbone(self.cfg.MODEL_BACKBONE, pretrained=cfg.MODEL_BACKBONE_PRETRAIN, norm_layer=self.batchnorm, **kwargs)
+		self.backbone = build_backbone(self.cfg.MODEL_BACKBONE, pretrained=cfg.MODEL_BACKBONE_PRETRAIN, model_url=cfg.MODEL_BACKBONE_PRETRAIN_URL,
+				 norm_layer=self.batchnorm, **kwargs)
 		self.conv_fov = nn.Conv2d(self.backbone.OUTPUT_DIM, 512, 3, 1, padding=12, dilation=12, bias=False)
 		self.bn_fov = batchnorm(512, momentum=cfg.TRAIN_BN_MOM, affine=True)
 		self.conv_fov2 = nn.Conv2d(512, 512, 1, 1, padding=0, bias=False)
@@ -41,7 +42,7 @@ class deeplabv1(nn.Module):
 
 	def forward(self, x):
 		n,c,h,w = x.size()
-		x_bottom = self.backbone(x)[-1]
+		x_bottom = self.backbone(x)
 		feature = self.conv_fov(x_bottom)
 		feature = self.bn_fov(feature)
 		feature = F.relu(feature, inplace=True)

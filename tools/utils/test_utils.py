@@ -3,13 +3,13 @@ import torch
 from tqdm import tqdm
 import utils.dist as ptu
 
-def single_gpu_test(model, dataloader, prepare_func, inference_func, collect_func, save_step_func=None, save_path=None):
+def single_gpu_test(model, device, dataloader, prepare_func, inference_func, collect_func, save_step_func=None, save_path=None):
 	model.eval()
 	n_gpus = torch.cuda.device_count()
 	#assert n_gpus == 1
 	collect_list = []
 	total_num = len(dataloader)
-	with tqdm(total=total_num, position=ptu.dist_rank) as pbar:
+	with tqdm(total=total_num) as pbar:
 		with torch.no_grad():
 			for i_batch, sample in enumerate(dataloader):
 				name = sample['name']
@@ -21,7 +21,7 @@ def single_gpu_test(model, dataloader, prepare_func, inference_func, collect_fun
 					image_msf = prepare_func(sample)
 					result_list = []
 					for img in image_msf:
-						result = inference_func(model, img.cuda())	
+						result = inference_func(model, img.to(device))	
 						result_list.append(result)
 					result_item = collect_func(result_list, sample)
 				result_sample = {'predict': result_item, 'name':name[0]}

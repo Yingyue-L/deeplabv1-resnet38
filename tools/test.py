@@ -40,10 +40,27 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--period", default="val", type=str)
+parser.add_argument("--local_rank", type=int)
+parser.add_argument("--test_ckpt", type=str, required=True)
+parser.add_argument("--test_save", default=None, type=str)
+parser.add_argument("--test_flip", action="store_true")
+parser.add_argument("--test_multiscale", action="store_true")
 
 args = parser.parse_args()
 
+# distributed
+torch.distributed.init_process_group(backend='nccl',init_method='env://')
+torch.cuda.set_device(args.local_rank) 
+device = torch.device("cuda", args.local_rank)
+
 cfg = Configuration(config_dict, False)
+
+cfg.TEST_CKPT = args.test_ckpt
+if args.test_save is not None:
+	cfg.TEST_SAVE = args.test_save
+cfg.TEST_FLIP = args.test_flip
+cfg.TEST_MULTISCALE = [1.0] if not args.test_multiscale else [0.5, 0.75, 1.0, 1.25, 1.5]
+
 
 def ClassLogSoftMax(f, category):
 	exp = torch.exp(f)
@@ -53,12 +70,16 @@ def ClassLogSoftMax(f, category):
 	return softmax, logsoftmax
 
 def test_net():
-	dataset = generate_dataset(cfg, period=args.period, transform='none')
+	dataset = generate_dataset(cfg, period=args.period, transform='none', save_path=cfg.TEST_SAVE)
 	def worker_init_fn(worker_id):
 		np.random.seed(1 + worker_id)
+
+	is_distributed = torch.distributed.get_world_size() > 1
+	sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=False) if is_distributed else None
 	dataloader = DataLoader(dataset, 
 				batch_size=1, 
 				shuffle=False, 
+				sampler=sampler,
 				num_workers=cfg.DATA_WORKERS,
 				worker_init_fn = worker_init_fn)
 	
@@ -68,13 +89,16 @@ def test_net():
 	if cfg.TEST_CKPT is None:
 		raise ValueError('test.py: cfg.MODEL_CKPT can not be empty in test period')
 	print('start loading model %s'%cfg.TEST_CKPT)
-	model_dict = torch.load(cfg.TEST_CKPT, map_location=ptu.device)
+	model_dict = torch.load(cfg.TEST_CKPT, map_location="cpu")
 	net.load_state_dict(model_dict, strict=False)
 
-	print('Use %d GPU'%cfg.GPUS)
-	assert torch.cuda.device_count() == cfg.GPUS
-	device = torch.device('cuda')
-	net.to(device)
+	# print('Use %d GPU'%cfg.GPUS)
+	# assert torch.cuda.device_count() == cfg.GPUS
+	# device = torch.device('cuda')
+	net.to(device)		
+	net = torch.nn.parallel.DistributedDataParallel(net,
+                                                  device_ids=[args.local_rank],
+                                                  output_device=args.local_rank, find_unused_parameters=True)
 	net.eval()
 
 
@@ -104,14 +128,13 @@ def test_net():
 		prob_seg = torch.cat(result_list, dim=0)
 		prob_seg = torch.mean(prob_seg, dim=0, keepdim=True)
 		result_sample = prob_seg[0].cpu().numpy()
-		prob_seg = F.softmax(torch.mean(prob_seg, dim=0, keepdim=True),dim=1)[0]
-		
 
-
+		prob_seg = F.softmax(prob_seg,dim=1)[0]
 		result = torch.argmax(prob_seg, dim=0, keepdim=False).cpu().numpy()
-		keys = np.unique(result)
-		result_sample = result_sample[keys]
+
 		if cfg.TEST_SAVE is not None:
+			keys = np.unique(result)
+			result_sample = result_sample[keys]	
 			np.save(os.path.join(cfg.TEST_SAVE, sample['name'][0] + '.npy'),
                     {"prob": result_sample, "keys": keys, "pred": result})
 		return result
@@ -119,10 +142,18 @@ def test_net():
 	def save_step_func(result_sample):
 		dataset.save_result([result_sample], cfg.EXP_NAME)
 
-	result_list = single_gpu_test(net, dataloader, prepare_func=prepare_func, inference_func=inference_func, collect_func=collect_func, save_step_func=save_step_func, save_path=cfg.TEST_SAVE)
-	resultlog = dataset.do_python_eval(cfg.EXP_NAME)
-	print('Test finished')
-	writelog(cfg, args.period, metric=resultlog)
+	single_gpu_test(net, device, dataloader, prepare_func=prepare_func, inference_func=inference_func,collect_func=collect_func, save_step_func=save_step_func, save_path=cfg.TEST_SAVE)
+	if is_distributed:
+		torch.distributed.barrier()
+	if not is_distributed or torch.distributed.get_rank() == 0:
+		resultlog = dataset.do_python_eval(cfg.EXP_NAME)
+		# 写出eval结果
+		for k,v in resultlog.items():
+			with open(os.path.join(os.path.dirname(cfg.TEST_CKPT), f"resultlog_{args.period}.txt"), 'a') as f:
+				f.write('ckpt:%s\t%s:%g\n'%(cfg.TEST_CKPT,k,v))
+
+		print('Test finished')
+		writelog(cfg, args.period, metric=resultlog)
 
 if __name__ == '__main__':
 	test_net()

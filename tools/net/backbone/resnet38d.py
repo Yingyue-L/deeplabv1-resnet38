@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from utils.registry import BACKBONES
 
-model_url='ilsvrc-cls_rna-a1_cls1000_ep-0001.params'
+# model_url='ilsvrc-cls_rna-a1_cls1000_ep-0001.params'
 bn_mom = 0.0003
 
 class ResBlock(nn.Module):
@@ -187,7 +187,7 @@ class Net(nn.Module):
         x = self.b7(x)
         conv6 = F.relu(self.bn7(x))
 
-        return [conv4, conv5, conv6]
+        return conv6
 
     def train(self, mode=True):
 
@@ -264,9 +264,12 @@ def convert_mxnet_to_torch(filename):
     return renamed_dict
 
 @BACKBONES.register_module
-def resnet38(pretrained=False, norm_layer=nn.BatchNorm2d, **kwargs):
+def resnet38(pretrained=False, model_url='ilsvrc-cls_rna-a1_cls1000_ep-0001.params', norm_layer=nn.BatchNorm2d, **kwargs):
     model = Net(norm_layer)
     if pretrained:
-        weight_dict = convert_mxnet_to_torch(model_url)
+        if model_url.endswith('.pth'):
+            weight_dict = torch.load(model_url, map_location='cpu')
+        else:
+            weight_dict = convert_mxnet_to_torch(model_url)
         model.load_state_dict(weight_dict,strict=False) 
     return model

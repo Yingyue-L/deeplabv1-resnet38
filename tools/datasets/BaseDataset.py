@@ -18,7 +18,7 @@ from utils.registry import DATASETS
 
 #@DATASETS.register_module
 class BaseDataset(Dataset):
-	def __init__(self, cfg, period, transform='none'):
+	def __init__(self, cfg, period, transform='none', save_path=None):
 		super(BaseDataset, self).__init__()
 		self.cfg = cfg
 		self.period = period
@@ -28,7 +28,8 @@ class BaseDataset(Dataset):
 		self.num_categories = None
 		self.totensor = ToTensor()
 		self.imagenorm = ImageNorm(cfg.DATA_MEAN, cfg.DATA_STD)
-		
+		self.save_path = save_path
+
 		if self.transform != 'none':
 			if cfg.DATA_RANDOMCROP > 0:
 				self.randomcrop = RandomCrop(cfg.DATA_RANDOMCROP)
@@ -43,13 +44,16 @@ class BaseDataset(Dataset):
 
 
 	def __getitem__(self, idx):
+		name = self.load_name(idx)
+		if self.save_path is not None and os.path.exists(os.path.join(self.save_path, name[0] + '.npy')):
+			return self.totensor({'name': name})
 		sample = self.__sample_generate__(idx)
 
 		if 'segmentation' in sample.keys():
 			sample['mask'] = sample['segmentation'] < self.num_categories
 			t = sample['segmentation'].copy()
 			t[t >= self.num_categories] = 0
-			sample['segmentation_onehot']=onehot(t,self.num_categories)
+		# 	sample['segmentation_onehot']=onehot(t,self.num_categories) # cause gpu low use rate
 		return self.totensor(sample)
 
 	def __sample_generate__(self, idx, split_idx=0):
@@ -65,10 +69,10 @@ class BaseDataset(Dataset):
 		else:
 			segmentation = self.load_segmentation(idx)
 		sample['segmentation'] = segmentation
-		t = sample['segmentation'].copy()
-		t[t >= self.num_categories] = 0
-		sample['category'] = seg2cls(t,self.num_categories)
-		sample['category_copypaste'] = np.zeros(sample['category'].shape)
+		# t = sample['segmentation'].copy()
+		# t[t >= self.num_categories] = 0
+		# sample['category'] = seg2cls(t,self.num_categories)
+		# sample['category_copypaste'] = np.zeros(sample['category'].shape)
 
 		#if self.transform == 'none' and self.cfg.DATA_FEATURE_DIR:
 		#	feature = self.load_feature(idx)

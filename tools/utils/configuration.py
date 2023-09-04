@@ -22,13 +22,14 @@ class Configuration():
 		# if self.GPUS != torch.cuda.device_count():
 		# 	raise ValueError('config.py: GPU number is not matched')
 		self.GPUS = torch.cuda.device_count()
-		if not os.path.isdir(self.LOG_DIR):
-			os.makedirs(self.LOG_DIR)
-		elif self.clear:
-			shutil.rmtree(self.LOG_DIR)
-			os.mkdir(self.LOG_DIR)
-		if not os.path.isdir(self.MODEL_SAVE_DIR):
-			os.makedirs(self.MODEL_SAVE_DIR)
+		# if torch.distributed.get_rank() == 0:
+		# 	if not os.path.isdir(self.LOG_DIR):
+		# 		os.makedirs(self.LOG_DIR)
+		# 	elif self.clear:
+		# 		shutil.rmtree(self.LOG_DIR)
+		# 		os.mkdir(self.LOG_DIR)
+		# 	if not os.path.isdir(self.MODEL_SAVE_DIR):
+		# 		os.makedirs(self.MODEL_SAVE_DIR)
 
 
 

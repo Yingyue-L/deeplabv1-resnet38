@@ -1,23 +1,27 @@
 # DeeplabV1 ResNet38 Retrain
 
-
-Make sure you move to the root dir `deeplabv1-resnet38`.
-
-First download the ResNet38 pretrain from [here](https://drive.google.com/file/d/16Ij5lqBExoZT7ijERiBBJYZh5qMDT2Z1/view?usp=share_link), then move the Pseudo Mask here.
+First download the ResNet38 pretrain from [here](https://drive.google.com/file/d/16Ij5lqBExoZT7ijERiBBJYZh5qMDT2Z1/view?usp=share_link).
 
 ## Training
 Please modify the configration in [config.py](tools/config.py) according to your device firstly.
+
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 python tools/train.py
+CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 tools/train.py 
 ```
 
 ## Test
 
+Don't forget to check test configration in [config.py](tools/config.py) first.
 
-Don't forget to check test configration in [config.py](tools/config.py) then
+### VOC12
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 python tools/test.py --period val_5000
+CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 tools/test.py --period val --test_ckpt [checkpoint path] --test_flip --test_multiscale --test_save prob_npy
+```
+
+### COCO14
+```bash
+CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 tools/test.py --period val --test_ckpt [checkpoint path] --test_flip --test_multiscale --test_save prob_npy
 ```
 
 ## CRF Postprocess
