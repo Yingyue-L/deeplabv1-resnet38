@@ -82,7 +82,6 @@ if torch.distributed.get_rank() == 0:
 	if not os.path.isdir(cfg.MODEL_SAVE_DIR):
 		os.makedirs(cfg.MODEL_SAVE_DIR)
 
-	# 保存config文件
 	with open(os.path.join(cfg.MODEL_SAVE_DIR, 'config.txt'), 'w') as f:
 		for k, v in config_dict.items():
 			f.write(k + ':' + str(v) + '\n')
@@ -226,7 +225,6 @@ def train_net():
 
 					if not is_distributed or torch.distributed.get_rank() == 0:
 						resultlog = eval_dataset.do_python_eval(cfg.EXP_NAME)
-						# 写出eval结果
 						for k,v in resultlog.items():
 							with open(os.path.join(cfg.MODEL_SAVE_DIR, f"resultlog_{args.period}.txt"), 'a') as f:
 								f.write('epoch:%d\titer:%d\t%s:%g\n'%(epoch,itr,k,v))
@@ -246,7 +244,7 @@ def train_net():
 				torch.distributed.barrier()
 			if not is_distributed or torch.distributed.get_rank() == 0:
 				resultlog = eval_dataset.do_python_eval(cfg.EXP_NAME)
-				# 写出eval结果
+				#eva
 				for k,v in resultlog.items():
 					with open(os.path.join(cfg.MODEL_SAVE_DIR, f"resultlog_{args.period}.txt"), 'a') as f:
 						f.write('epoch:%d\titer:%d\t%s:%g\n'%(epoch,itr,k,v))

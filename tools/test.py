@@ -147,7 +147,6 @@ def test_net():
 		torch.distributed.barrier()
 	if not is_distributed or torch.distributed.get_rank() == 0:
 		resultlog = dataset.do_python_eval(cfg.EXP_NAME)
-		# 写出eval结果
 		for k,v in resultlog.items():
 			with open(os.path.join(os.path.dirname(cfg.TEST_CKPT), f"resultlog_{args.period}.txt"), 'a') as f:
 				f.write('ckpt:%s\t%s:%g\n'%(cfg.TEST_CKPT,k,v))
